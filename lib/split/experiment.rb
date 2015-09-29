@@ -141,6 +141,7 @@ module Split
     end
 
     def winner
+      raise "zz"
       if w = Split.redis.hget(:experiment_winner, name)
         Split::Alternative.new(w, name)
       else
@@ -173,6 +174,7 @@ module Split
     end
 
     def start_time
+      raise "11"
       t = Split.redis.hget(:experiment_start_times, @name)
       if t
         # Check if stored time is an integer
@@ -246,6 +248,7 @@ module Split
     end
 
     def load_from_redis
+      raise "22"
       exp_config = Split.redis.hgetall(experiment_config_key)
       self.resettable = exp_config['resettable']
       self.algorithm = exp_config['algorithm']

@@ -12,6 +12,7 @@ module Split
     end
 
     def self.load_from_redis(name)
+      raise "33"
       metric = Split.redis.hget(:metrics, name)
       if metric
         experiment_names = metric.split(',')

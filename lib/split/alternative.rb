@@ -39,6 +39,7 @@ module Split
     end
 
     def completed_count(goal = nil)
+      raise "yy"
       field = set_field(goal)
       Split.redis.hget(key, field).to_i
     end

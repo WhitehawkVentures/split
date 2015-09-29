@@ -19,6 +19,7 @@ module Split
       end
 
       def [](field)
+        raise "44"
         Split.redis.hget(redis_key, field)
       end
 
