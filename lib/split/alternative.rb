@@ -30,6 +30,7 @@ module Split
     end
 
     def participant_count
+      raise "xx"
       Split.redis.hget(key, 'participant_count').to_i
     end
 
