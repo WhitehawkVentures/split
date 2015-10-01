@@ -12,17 +12,19 @@ module Split
     end
 
     def self.load_from_redis(name)
-      metric = Split.redis.hget(:metrics, name)
-      if metric
-        experiment_names = metric.split(',')
+      Split.redis.with do |conn|
+        metric = conn.hget(:metrics, name)
+        if metric
+          experiment_names = metric.split(',')
 
-        experiments = experiment_names.collect do |experiment_name|
-          Split::Experiment.find(experiment_name)
+          experiments = experiment_names.collect do |experiment_name|
+            Split::Experiment.find(experiment_name)
+          end
+
+          Split::Metric.new(:name => name, :experiments => experiments)
+        else
+          nil
         end
-
-        Split::Metric.new(:name => name, :experiments => experiments)
-      else
-        nil
       end
     end
 
@@ -52,13 +54,16 @@ module Split
     end
 
     def self.all
-      redis_metrics = Split.redis.hgetall(:metrics).collect do |key, value|
-        find(key)
+      Split.redis.with do |conn|
+        redis_metrics = conn.hgetall(:metrics).collect do |key, value|
+          find(key)
+        end
+      
+        configuration_metrics = Split.configuration.metrics.collect do |key, value|
+          new(name: key, experiments: value)
+        end
+        redis_metrics | configuration_metrics
       end
-      configuration_metrics = Split.configuration.metrics.collect do |key, value|
-        new(name: key, experiments: value)
-      end
-      redis_metrics | configuration_metrics
     end
 
     def self.possible_experiments(metric_name)
@@ -75,7 +80,9 @@ module Split
     end
 
     def save
-      Split.redis.hset(:metrics, name, experiments.map(&:name).join(','))
+      Split.redis.with do |conn|
+        conn.hset(:metrics, name, experiments.map(&:name).join(','))
+      end
     end
 
     def complete!
