@@ -301,7 +301,7 @@ module Split
       return prob_A_greater_B
     end
 
-    def draw_log_normal_means(data,m0,k0,s_sq0,v0,n_samples=100)
+    def draw_log_normal_means(data,m0,k0,s_sq0,v0,n_samples=10000)
       # log transform the data
       log_data = data.collect{|n| Math.log(n)}
 
