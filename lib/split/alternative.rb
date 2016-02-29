@@ -43,9 +43,11 @@ module Split
 
     def completed_count(goal = nil)
       field = set_field(goal)
-      Split.redis.with do |conn|
+      ret = Split.redis.with do |conn|
         conn.hget(key, field).to_i
       end
+      # the return value should always be an integer
+      return (ret == [] ? 0 : ret )
     end
 
     def all_completed_count
