@@ -50,6 +50,15 @@ module Split
       return (ret == [] ? 0 : ret )
     end
 
+    def unique_completed_count(goal = nil)
+      field = set_field(goal, true)
+      ret = Split.redis.with do |conn|
+        conn.hget(key, field).to_i
+      end
+      # the return value should always be an integer
+      return (ret == [] ? 0 : ret )
+    end
+
     def all_completed_count
       if goals.empty?
         completed_count
@@ -142,6 +151,7 @@ module Split
       Split.redis.with do |conn|
         conn.hsetnx key, 'participant_count', 0
         conn.hsetnx key, 'completed_count', 0
+        conn.hsetnx key, 'unique_completed_count', 0
       end
     end
 
@@ -153,10 +163,12 @@ module Split
 
     def reset
       Split.redis.with do |conn|
-        conn.hmset key, 'participant_count', 0, 'completed_count', 0
+        conn.hmset key, 'participant_count', 0, 'completed_count', 0, 'unique_completed_count', 0
         unless goals.empty?
           goals.each do |g|
             field = "completed_count:#{g}"
+            conn.hset key, field, 0
+            field = "unique_completed_count:#{g}"
             conn.hset key, field, 0
           end
         end
