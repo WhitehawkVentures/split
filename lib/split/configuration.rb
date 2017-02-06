@@ -7,7 +7,6 @@ module Split
     attr_accessor :db_failover
     attr_accessor :db_failover_on_db_error
     attr_accessor :db_failover_allow_parameter_override
-    attr_accessor :allow_multiple_experiments
     attr_accessor :enabled
     attr_accessor :persistence
     attr_accessor :algorithm
@@ -191,7 +190,6 @@ module Split
       @on_experiment_reset = proc{|experiment|}
       @on_experiment_delete = proc{|experiment|}
       @db_failover_allow_parameter_override = false
-      @allow_multiple_experiments = false
       @enabled = true
       @experiments = {}
       @persistence = Split::Persistence::RedisAdapter

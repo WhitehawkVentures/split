@@ -4,7 +4,7 @@ module Split
       DEFAULT_CONFIG = {:namespace => 'persistence'}.freeze
 
       attr_reader :redis_key
-      attr_reader :split_id
+      attr_reader :key_frag
 
       def initialize(context)
         if lookup_by = self.class.config[:lookup_by]
@@ -14,7 +14,7 @@ module Split
             key_frag = context.send(lookup_by)
           end
           @redis_key = "#{self.class.config[:namespace]}:#{key_frag}"
-          @split_id = key_frag
+          @key_frag = key_frag
         else
           raise "Please configure lookup_by"
         end
@@ -41,12 +41,6 @@ module Split
       def keys
         Split.redis.with do |conn|
           conn.hkeys(redis_key)
-        end
-      end
-
-      def add_set(key, value)
-        Split.redis.with do |conn|
-          conn.sadd("#{self.class.config[:namespace]}:#{key}")
         end
       end
 

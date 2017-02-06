@@ -23,7 +23,7 @@ module Split
 
         ret = if Split.configuration.enabled
           experiment.save
-          start_trial( Trial.new(:experiment => experiment, :split_id => ab_user.split_id) )
+          start_trial( Trial.new(:experiment => experiment, :split_id => split_id) )
         else
           control_variable(control)
         end
@@ -53,16 +53,10 @@ module Split
 
     def finish_experiment(experiment, options = {})
       return true if experiment.has_winner?
-      if ab_user[experiment.finished_key]
-        return true
-      else
-        trial = Trial.new(:experiment => experiment, :split_id => ab_user.split_id, :goals => options[:goals])
-        call_trial_complete_hook(trial) if trial.complete!
-
-        ab_user[experiment.finished_key] = true
+      trial = Trial.new(:experiment => experiment, :split_id => split_id, :goals => options[:goals])
+      call_trial_complete_hook(trial) if trial.complete!
       end
     end
-
 
     def finished(metric_descriptor, options = {})
       return if exclude_visitor? || Split.configuration.disabled?
@@ -87,39 +81,16 @@ module Split
       params[experiment_name] if override_present?(experiment_name)
     end
 
-    def begin_experiment(experiment)
-      ab_user[experiment.key] = 1
-    end
-
     def ab_user
       @ab_user ||= Split::Persistence.adapter.new(self)
     end
 
+    def split_id
+      ab_user.key_frag
+    end
+
     def exclude_visitor?
       instance_eval(&Split.configuration.ignore_filter)
-    end
-
-    def not_allowed_to_test?(experiment_key)
-      !Split.configuration.allow_multiple_experiments && doing_other_tests?(experiment_key)
-    end
-
-    def doing_other_tests?(experiment_key)
-      keys_without_experiment(ab_user.keys, experiment_key).length > 0
-    end
-
-    def clean_old_versions(experiment)
-      old_versions(experiment).each do |old_key|
-        ab_user.delete old_key
-      end
-    end
-
-    def old_versions(experiment)
-      if experiment.version > 0
-        keys = ab_user.keys.select { |k| k.match(Regexp.new(experiment.name)) }
-        keys_without_experiment(keys, experiment.key)
-      else
-        []
-      end
     end
 
     def is_robot?
@@ -160,15 +131,14 @@ module Split
         ret = experiment.winner.name
       else
         clean_old_versions(experiment)
-        if exclude_visitor? || not_allowed_to_test?(experiment.key) || not_started?(experiment)
+        if exclude_visitor? || not_started?(experiment)
           ret = experiment.control.name
         else
-          if ab_user[experiment.key]
-            trial.choose
+          if experiment.participating?(split_id)
+            trial.choose!
           else
             trial.choose!
             call_trial_choose_hook(trial)
-            begin_experiment(experiment)
           end
 
           ret = trial.alternative.name

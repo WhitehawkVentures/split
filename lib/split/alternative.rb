@@ -64,8 +64,12 @@ module Split
       participant_count - all_completed_count
     end
 
-    def set_field(goal)
-      field = "completed_count"
+    def set_field(goal, unique = false)
+      if unique
+        field = "unique_completed_count"
+      else
+        field = "completed_count"
+      end
       field += ":" + goal unless goal.nil?
       return field
     end
@@ -85,6 +89,13 @@ module Split
 
     def increment_completion(goal = nil)
       field = set_field(goal)
+      Split.redis.with do |conn|
+        conn.hincrby(key, field, 1)
+      end
+    end
+
+    def increment_unique_completion(goal = nil)
+      field = set_field(goal, true)
       Split.redis.with do |conn|
         conn.hincrby(key, field, 1)
       end

@@ -234,8 +234,34 @@ module Split
       "#{name}:goals"
     end
 
-    def finished_key
-      "#{key}:finished"
+    def finished?(split_id, goal = nil)
+      key = "#{self.key}:finished"
+      key << ":#{goal}" if goal
+      Split.redis.with do |conn|
+        conn.sismember(key, split_id)
+      end
+    end
+
+    def finish!(split_id, goal = nil)
+      key = "#{self.key}:finished"
+      key << ":#{goal}" if goal
+      Split.redis.with do |conn|
+        conn.sadd(key, split_id)
+      end
+    end
+
+    def participate!(split_id)
+      key = "#{self.key}:participants"
+      Split.redis.with do |conn|
+        conn.sadd(key, split_id)
+      end
+    end
+
+    def participating?(split_id)
+      key = "#{self.key}:participants"
+      Split.redis.with do |conn|
+        conn.sismember(key, split_id)
+      end
     end
 
     def resettable?
