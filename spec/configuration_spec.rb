@@ -48,10 +48,6 @@ describe Split::Configuration do
     @config.robot_regex.should =~ "newbot"
   end
 
-  it "should use the session adapter for persistence by default" do
-    @config.persistence.should eq(Split::Persistence::SessionAdapter)
-  end
-
   it "should load a metric" do
     @config.experiments = {:my_experiment=>
         {:alternatives=>["control_opt", "other_opt"], :metric=>:my_metric}}

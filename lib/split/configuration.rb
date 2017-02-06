@@ -194,7 +194,7 @@ module Split
       @allow_multiple_experiments = false
       @enabled = true
       @experiments = {}
-      @persistence = Split::Persistence::SessionAdapter
+      @persistence = Split::Persistence::RedisAdapter
       @algorithm = Split::Algorithms::WeightedSample
       @include_rails_helper = true
     end

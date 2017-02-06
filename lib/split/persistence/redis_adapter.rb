@@ -44,6 +44,12 @@ module Split
         end
       end
 
+      def add_set(key, value)
+        Split.redis.with do |conn|
+          conn.sadd("#{self.class.config[:namespace]}:#{key}")
+        end
+      end
+
       def self.with_config(options={})
         self.config.merge!(options)
         self
