@@ -23,7 +23,7 @@ module Split
 
         ret = if Split.configuration.enabled
           experiment.save
-          start_trial( Trial.new(:experiment => experiment) )
+          start_trial( Trial.new(:experiment => experiment, :split_id => ab_user.split_id) )
         else
           control_variable(control)
         end
@@ -51,30 +51,20 @@ module Split
       end
     end
 
-    def reset!(experiment)
-      ab_user.delete(experiment.key)
-    end
-
-    def finish_experiment(experiment, options = {:reset => true})
+    def finish_experiment(experiment, options = {})
       return true if experiment.has_winner?
-      should_reset = experiment.resettable? && options[:reset]
-      if ab_user[experiment.finished_key] && !should_reset
+      if ab_user[experiment.finished_key]
         return true
       else
-        alternative_name = ab_user[experiment.key]
-        trial = Trial.new(:experiment => experiment, :alternative => alternative_name, :goals => options[:goals])
+        trial = Trial.new(:experiment => experiment, :split_id => ab_user.split_id, :goals => options[:goals])
         call_trial_complete_hook(trial) if trial.complete!
 
-        if should_reset
-          reset!(experiment)
-        else
-          ab_user[experiment.finished_key] = true
-        end
+        ab_user[experiment.finished_key] = true
       end
     end
 
 
-    def finished(metric_descriptor, options = {:reset => true})
+    def finished(metric_descriptor, options = {})
       return if exclude_visitor? || Split.configuration.disabled?
       metric_descriptor, goals = normalize_experiment(metric_descriptor)
       experiments = Metric.possible_experiments(metric_descriptor)
@@ -97,10 +87,8 @@ module Split
       params[experiment_name] if override_present?(experiment_name)
     end
 
-    def begin_experiment(experiment, alternative_name = nil)
-      alternative_name ||= experiment.control.name
-      ab_user[experiment.key] = alternative_name
-      alternative_name
+    def begin_experiment(experiment)
+      ab_user[experiment.key] = 1
     end
 
     def ab_user
@@ -168,7 +156,6 @@ module Split
       experiment = trial.experiment
       if override_present?(experiment.name) and experiment[override_alternative(experiment.name)]
         ret = override_alternative(experiment.name)
-        ab_user[experiment.key] = ret if Split.configuration.store_override
       elsif experiment.has_winner?
         ret = experiment.winner.name
       else
@@ -177,12 +164,14 @@ module Split
           ret = experiment.control.name
         else
           if ab_user[experiment.key]
-            ret = ab_user[experiment.key]
+            trial.choose
           else
             trial.choose!
             call_trial_choose_hook(trial)
-            ret = begin_experiment(experiment, trial.alternative.name)
+            begin_experiment(experiment)
           end
+
+          ret = trial.alternative.name
         end
       end
 

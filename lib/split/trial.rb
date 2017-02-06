@@ -1,17 +1,20 @@
 module Split
   class Trial
     attr_accessor :experiment
+    attr_accessor :split_id
     attr_accessor :goals
 
     def initialize(attrs = {})
       self.experiment = attrs[:experiment]  if !attrs[:experiment].nil?
-      self.alternative = attrs[:alternative] if !attrs[:alternative].nil?
+      self.split_id = attrs[:split_id] if !attrs[:split_id].nil?
       self.goals = attrs[:goals].nil? ? [] : attrs[:goals]
     end
 
     def alternative
       @alternative ||=  if experiment.has_winner?
                           experiment.winner
+                        else
+                          choose
                         end
     end
 
@@ -35,7 +38,7 @@ module Split
     end
 
     def choose
-      self.alternative = experiment.next_alternative
+      self.alternative = experiment.next_alternative(split_id)
     end
 
     def alternative=(alternative)

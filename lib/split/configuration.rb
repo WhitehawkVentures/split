@@ -11,7 +11,6 @@ module Split
     attr_accessor :enabled
     attr_accessor :persistence
     attr_accessor :algorithm
-    attr_accessor :store_override
     attr_accessor :start_manually
     attr_accessor :on_trial_choose
     attr_accessor :on_trial_complete

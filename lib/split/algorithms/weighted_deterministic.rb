@@ -1,15 +1,17 @@
 module Split
   module Algorithms
-    module WeightedSample
+    module WeightedDeterministic
       def self.choose_alternative(experiment, split_id)
-        weights = experiment.alternatives.map(&:weight)
+        hash = Digest::MurmurHash1.rawdigest("#{experiment.key}:#{split_id}")
 
-        total = weights.inject(:+)
-        point = rand * total
+        weights = experiment.alternatives.map(&:weight)
+        total = weights.inject(:+) * 100
+
+        point = (hash % total)
 
         experiment.alternatives.zip(weights).each do |n,w|
-          return n if w >= point
-          point -= w
+          return n if w*100 > point
+          point -= w*100
         end
       end
     end
