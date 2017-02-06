@@ -55,7 +55,6 @@ module Split
       return true if experiment.has_winner?
       trial = Trial.new(:experiment => experiment, :split_id => split_id, :goals => options[:goals])
       call_trial_complete_hook(trial) if trial.complete!
-      end
     end
 
     def finished(metric_descriptor, options = {})
@@ -130,7 +129,6 @@ module Split
       elsif experiment.has_winner?
         ret = experiment.winner.name
       else
-        clean_old_versions(experiment)
         if exclude_visitor? || not_started?(experiment)
           ret = experiment.control.name
         else

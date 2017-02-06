@@ -162,6 +162,8 @@ module Split
       Split.redis.with do |conn|
         conn.hset(:experiment_winner, name, winner_name.to_s)
       end
+      delete_participants
+      delete_finished
     end
 
     def participant_count
@@ -271,6 +273,8 @@ module Split
     def reset
       alternatives.each(&:reset)
       reset_winner
+      delete_participants
+      delete_finished
       Split.configuration.on_experiment_reset.call(self)
       increment_version
     end
@@ -282,10 +286,31 @@ module Split
           reset_winner
           conn.srem(:experiments, name)
           conn.del(name)
+          delete_participants
+          delete_finished
           delete_goals
           Split.configuration.on_experiment_delete.call(self)
           increment_version
         #end
+      end
+    end
+
+    def delete_participants
+      Split.redis.with do |conn|
+        goals.each do |goal|
+          conn.del("#{self.key}:participants")
+        end
+      end
+    end
+
+    def delete_finished
+      Split.redis.with do |conn|
+        key = "#{self.key}:finished"
+        conn.del(key)
+        goals.each do |goal|
+          goal_key << ":#{goal}"
+          conn.del(goal_key)
+        end
       end
     end
 
