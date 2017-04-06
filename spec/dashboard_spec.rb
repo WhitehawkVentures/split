@@ -166,6 +166,7 @@ describe Split::Dashboard do
     Split.redis.with do |conn|
       conn.hdel(:experiment_start_times, experiment.name)
     end
+
     get '/'
 
     last_response.body.should include('<small>Unknown</small>')

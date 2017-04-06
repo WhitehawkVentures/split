@@ -12,6 +12,7 @@ module Split
     end
 
     def self.load_from_redis(name)
+      metric = nil
       Split.redis.with do |conn|
         metric = conn.hget(:metrics, name)
         if metric
@@ -21,11 +22,12 @@ module Split
             Split::Experiment.find(experiment_name)
           end
 
-          Split::Metric.new(:name => name, :experiments => experiments)
-        else
-          nil
+          metric = Split::Metric.new(:name => name, :experiments => experiments)
+        else 
+          metric = nil
         end
       end
+      metric
     end
 
     def self.load_from_configuration(name)
@@ -58,7 +60,6 @@ module Split
         redis_metrics = conn.hgetall(:metrics).collect do |key, value|
           find(key)
         end
-      
         configuration_metrics = Split.configuration.metrics.collect do |key, value|
           new(name: key, experiments: value)
         end

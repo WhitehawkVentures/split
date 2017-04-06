@@ -7,17 +7,18 @@ module Split
     attr_accessor :db_failover
     attr_accessor :db_failover_on_db_error
     attr_accessor :db_failover_allow_parameter_override
-    attr_accessor :allow_multiple_experiments
     attr_accessor :enabled
     attr_accessor :persistence
     attr_accessor :algorithm
-    attr_accessor :store_override
     attr_accessor :start_manually
     attr_accessor :on_trial_choose
     attr_accessor :on_trial_complete
     attr_accessor :on_experiment_reset
     attr_accessor :on_experiment_delete
+    attr_accessor :on_experiment_max_out
+    attr_accessor :on_experiment_end
     attr_accessor :include_rails_helper
+    attr_accessor :pipeline_size
 
     attr_reader :experiments
 
@@ -85,7 +86,7 @@ module Split
         'DigitalPersona Fingerprint Software' => 'HP Fingerprint scanner',
         'ShowyouBot' => 'Showyou iOS app spider',
         'ZyBorg' => 'Zyborg? Hmmm....',
-        'ELB-HealthChecker' => 'ELB Health Check'
+        'ELB-HealthChecker' => 'ELB Health Check',
       }
     end
 
@@ -96,6 +97,11 @@ module Split
 
     def disabled?
       !enabled
+    end
+
+    def reset
+      remove_instance_variable(:@metrics) if defined?(@metrics)
+      remove_instance_variable(:@normalized_experiments) if defined?(@normalized_experiments)
     end
 
     def experiment_for(name)
@@ -126,6 +132,7 @@ module Split
       if @experiments.nil?
         nil
       else
+        return @normalized_experiments if defined?(@normalized_experiments)
         experiment_config = {}
         @experiments.keys.each do |name|
           experiment_config[name.to_sym] = {}
@@ -143,9 +150,13 @@ module Split
           if (resettable = value_for(settings, :resettable)) != nil
             experiment_config[experiment_name.to_sym][:resettable] = resettable
           end
+          
+          if (max_participant_count = value_for(settings, :max_participant_count)) != nil
+            experiment_config[experiment_name.to_sym][:max_participant_count] = max_participant_count.to_i
+          end
         end
 
-        experiment_config
+        @normalized_experiments = experiment_config
       end
     end
 
@@ -190,14 +201,16 @@ module Split
       @db_failover = false
       @db_failover_on_db_error = proc{|error|} # e.g. use Rails logger here
       @on_experiment_reset = proc{|experiment|}
+      @on_experiment_max_out = proc{|experiment|}
       @on_experiment_delete = proc{|experiment|}
+      @on_experiment_end = proc{|experiment|}
       @db_failover_allow_parameter_override = false
-      @allow_multiple_experiments = false
       @enabled = true
       @experiments = {}
-      @persistence = Split::Persistence::SessionAdapter
-      @algorithm = Split::Algorithms::WeightedSample
+      @persistence = Split::Persistence::RedisAdapter
+      @algorithm = Split::Algorithms::WeightedDeterministic
       @include_rails_helper = true
+      @pipeline_size = 5000
     end
 
     private

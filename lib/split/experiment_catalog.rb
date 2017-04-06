@@ -2,8 +2,8 @@ module Split
   class ExperimentCatalog
     # Return all experiments
     def self.all
-      # Call compact to prevent nil experiments from being returned -- seems to happen during gem upgrades
       Split.redis.with do |conn|
+        # Call compact to prevent nil experiments from being returned -- seems to happen during gem upgrades
         conn.smembers(:experiments).map {|e| find(e)}.compact
       end
     end

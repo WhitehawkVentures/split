@@ -1,0 +1,18 @@
+<% if @experiment.goals.empty? %>
+  <%= erb :_experiment, :locals => {:goal => nil, :experiment => @experiment} %>
+<% else %>
+  <%= erb :_experiment_with_goal_header, :locals => {:experiment => @experiment} %>
+  <% @experiment.goals.each do |g| %>
+    <div data-url="<%= "#{@experiment.name}/#{g}" %>" class="ajax-load">
+    </div>
+  <% end %>
+<% end %>
+
+<script type="text/javascript">
+  $(document).ready(function() {
+    $(".ajax-load").each(function() {
+      console.log($(this).attr("data-url"));
+      $(this).load($(this).attr("data-url"));
+    });
+  });
+</script>

@@ -5,7 +5,9 @@ module Split
     attr_accessor :resettable
     attr_accessor :goals
     attr_accessor :alternatives
-
+    attr_accessor :max_participant_count
+    attr_accessor :wiki_url
+    
     DEFAULT_OPTIONS = {
       :resettable => true,
     }
@@ -22,14 +24,16 @@ module Split
           alternatives: load_alternatives_from_configuration,
           goals: load_goals_from_configuration,
           resettable: exp_config[:resettable],
-          algorithm: exp_config[:algorithm]
+          algorithm: exp_config[:algorithm],
+          max_participant_count: exp_config[:max_participant_count]
         )
       else
         set_alternatives_and_options(
           alternatives: alternatives,
           goals: options[:goals],
           resettable: options[:resettable],
-          algorithm: options[:algorithm]
+          algorithm: options[:algorithm],
+          max_participant_count: options[:max_participant_count]
         )
       end
     end
@@ -39,6 +43,9 @@ module Split
       self.goals = options[:goals]
       self.resettable = options[:resettable]
       self.algorithm = options[:algorithm]
+      unless options[:max_participant_count].nil?
+        self.max_participant_count = options[:max_participant_count].to_i
+      end
     end
 
     def extract_alternatives_from_options(options)
@@ -72,12 +79,14 @@ module Split
 
     def save
       validate!
+
       Split.redis.with do |conn|
+        
         if new_record?
           conn.sadd(:experiments, name)
           start unless Split.configuration.start_manually
-          @alternatives.reverse.each {|a| conn.lpush(name, a.name) }
-          @goals.reverse.each {|a| conn.lpush(goals_key, a) } unless @goals.nil?
+          @alternatives.reverse.each {|a| conn.lpush(name, a.name)}
+          @goals.reverse.each {|a| conn.lpush(goals_key, a)} unless @goals.nil?
         else
           existing_alternatives = load_alternatives_from_redis
           existing_goals = load_goals_from_redis
@@ -86,14 +95,14 @@ module Split
             @alternatives.each(&:delete)
             delete_goals
             conn.del(@name)
-            
             @alternatives.reverse.each {|a| conn.lpush(name, a.name)}
-                  
-            @goals.reverse.each {|a| conn.lpush(goals_key, a) } unless @goals.nil?
+            @goals.reverse.each {|a| conn.lpush(goals_key, a)} unless @goals.nil?
           end
         end
+
         conn.hset(experiment_config_key, :resettable, resettable)
         conn.hset(experiment_config_key, :algorithm, algorithm.to_s)
+        conn.hset(experiment_config_key, :max_participant_count, max_participant_count) unless max_participant_count.nil?
       end
       self
     end
@@ -110,8 +119,18 @@ module Split
 
     def new_record?
       Split.redis.with do |conn|
-        !conn.exists(name)
+      !conn.exists(name)
       end
+    end
+
+    def to_hash
+      {
+        version: self.version,
+        algorithm: self.algorithm,
+        resettable: self.resettable,
+        started_at: self.start_time,
+        ended_at: self.end_time
+      }
     end
 
     def ==(obj)
@@ -122,8 +141,16 @@ module Split
       alternatives.find{|a| a.name == name}
     end
 
+    def wiki_url
+      @wiki_url ||= load_wiki_url_from_redis
+    end
+
     def algorithm
       @algorithm ||= Split.configuration.algorithm
+    end
+
+    def max_participant_count=(max_participant_count)
+      @max_participant_count = max_participant_count.to_i
     end
 
     def algorithm=(algorithm)
@@ -143,7 +170,14 @@ module Split
         end
       end
     end
-
+    
+    def wiki_url= url
+      @wiki_url = url
+      Split.redis.with do |conn|
+        conn.hset(:wiki_urls, @name, @wiki_url)
+      end
+    end
+    
     def winner
       Split.redis.with do |conn|
         if w = conn.hget(:experiment_winner, name)
@@ -154,14 +188,35 @@ module Split
       end
     end
 
+    def has_enough_participants?
+      if max_participant_count.nil? # it's never enough if no max participant count is set
+        false
+      elsif max_participant_count > participant_count # this can trigger as many as 4 Redis queries
+        false
+      else
+        true
+      end
+    end
+
     def has_winner?
-      !winner.nil?
+      @has_winner.nil? ? !winner.nil? : @has_winner
+    end
+    
+    def has_winner!
+      @has_winner = true
+    end
+    
+    def has_no_winner!
+      @has_winner = false
     end
 
     def winner=(winner_name)
       Split.redis.with do |conn|
         conn.hset(:experiment_winner, name, winner_name.to_s)
       end
+      set_end_time
+      delete_participants
+      delete_finished
     end
 
     def participant_count
@@ -176,6 +231,27 @@ module Split
       Split.redis.with do |conn|
         conn.hdel(:experiment_winner, name)
       end
+    end
+
+    def end_time
+      Split.redis.with do |conn|
+        t = conn.hget(:experiment_end_times, @name)
+        if t
+          # Check if stored time is an integer
+          if t =~ /^[-+]?[0-9]+$/
+            t = Time.at(t.to_i)
+          else
+            t = Time.parse(t)
+          end
+        end
+      end
+    end
+
+    def set_end_time
+      Split.redis.with do |conn|
+        conn.hset(:experiment_end_times, name, Time.now.to_i)
+      end
+      Split.configuration.on_experiment_end.call(self)
     end
 
     def start
@@ -197,14 +273,19 @@ module Split
         end
       end
     end
-
-    def next_alternative
-      winner || random_alternative
+    
+    #TODO: This currently only works with WeightedSample algorithm. 
+    def random_alternatives(num_participants)
+      if winner
+        Array.new(num_participants, winner)
+      else
+        algorithm.choose_alternatives(self, num_participants)
+      end
     end
 
-    def random_alternative
+    def random_alternative(split_id)
       if alternatives.length > 1
-        algorithm.choose_alternative(self)
+        algorithm.choose_alternative(self, split_id)
       else
         alternatives.first
       end
@@ -222,11 +303,19 @@ module Split
       end
     end
 
-    def key
+    def key(goal=nil)
       if version.to_i > 0
-        "#{name}:#{version}"
+        if goal
+          "#{name}:#{version}:#{goal}"
+        else
+          "#{name}:#{version}"
+        end
       else
-        name
+        if goal
+          "#{name}:#{goal}"
+        else
+          "#{name}"
+        end
       end
     end
 
@@ -234,8 +323,155 @@ module Split
       "#{name}:goals"
     end
 
-    def finished_key
-      "#{key}:finished"
+    def finished?(split_id, goal = nil)
+      @finished ||= {}
+
+      goalkey = goal || "nogoal"
+
+      if !@finished[split_id].nil? && !@finished[split_id][goalkey].nil?
+        return @finished[split_id][goalkey]
+      else
+        key = "#{self.key}:finished"
+        key << ":#{goal}" if goal
+        value = Split.redis.with do |conn|
+          conn.sismember(key, split_id)
+        end
+
+        @finished[split_id] ||= {}
+        @finished[split_id][goalkey] = value
+
+        return value
+      end
+    end
+
+    def cache_finished!(split_id, value, goal = nil)
+      @finished ||= {}
+
+      @finished[split_id] ||= {}
+
+      if goal
+        @finished[split_id][goal] = value
+      else
+        @finished[split_id]["nogoal"] = value
+      end
+    end
+
+    def self.preload_participating!(experiments, split_ids)
+      experiments = Array(experiments)
+      split_ids = Array(split_ids)
+
+      experiments_metadata = []
+      experiments.each do |experiment|
+        split_ids.each do |split_id|
+          key = "#{experiment.key}:participants"
+
+          experiments_metadata << {
+              :key => key,
+              :experiment => experiment,
+              :split_id => split_id
+          }
+        end
+      end
+
+      if experiments_metadata.present?
+        results = Split.redis.with do |conn|
+          conn.pipelined do
+            experiments_metadata.each do |metadata|
+              conn.sismember metadata[:key], metadata[:split_id]
+            end
+          end
+        end
+
+        results.each_with_index do |result, index|
+          metadata = experiments_metadata[index]
+          metadata[:experiment].cache_participating!(metadata[:split_id], result)
+        end
+      end
+    end
+
+    def self.preload_finished!(experiments, goals, split_ids)
+      experiments = Array(experiments)
+      split_ids = Array(split_ids)
+
+      experiments_metadata = []
+      goals.each do |goal|
+        experiments.each do |experiment|
+          split_ids.each do |split_id|
+            key = "#{experiment.key}:finished:#{goal}"
+
+            experiments_metadata << {
+                :key => key,
+                :experiment => experiment,
+                :goal => goal,
+                :split_id => split_id
+            }
+          end
+        end
+      end
+
+      if experiments_metadata.present?
+        results = Split.redis.with do |conn|
+          conn.pipelined do
+            experiments_metadata.each do |metadata|
+              conn.sismember metadata[:key], metadata[:split_id]
+            end
+          end
+        end
+
+        results.each_with_index do |result, index|
+          metadata = experiments_metadata[index]
+          metadata[:experiment].cache_finished!(metadata[:split_id], result, metadata[:goal])
+        end
+      end
+    end
+
+    def finish!(split_id, goal = nil)
+      key = "#{self.key}:finished"
+      key << ":#{goal}" if goal
+      Split.redis.with do |conn|
+        conn.sadd(key, split_id)
+      end
+
+      cache_finished!(split_id, true, goal)
+    end
+
+    def participate!(split_ids)
+      split_ids = Array(split_ids)
+      return if split_ids.blank?
+
+      key = "#{self.key}:participants"
+      Split.redis.with do |conn|
+        conn.sadd(key, split_ids)
+      end
+
+      cache_participating!(split_ids, true)
+    end
+
+    def cache_participating!(split_ids, value)
+      split_ids = Array(split_ids)
+
+      @participating ||= {}
+
+      split_ids.each do |split_id|
+        @participating[split_id] = value
+      end
+    end
+
+    def participating?(split_id)
+      @participating ||= {}
+
+      if !@participating[split_id].nil?
+        return @participating[split_id]
+      else
+        key = "#{self.key}:participants"
+        value = Split.redis.with do |conn|
+          conn.sismember(key, split_id)
+        end
+
+        @participating[split_id] = value
+
+        return value
+      end
     end
 
     def resettable?
@@ -245,21 +481,44 @@ module Split
     def reset
       alternatives.each(&:reset)
       reset_winner
+      delete_participants
+      delete_finished
       Split.configuration.on_experiment_reset.call(self)
       increment_version
+      Split.configuration.reset
     end
 
     def delete
       Split.redis.with do |conn|
-        #conn.pipelined do
-          alternatives.each(&:delete)
-          reset_winner
-          conn.srem(:experiments, name)
-          conn.del(name)
-          delete_goals
-          Split.configuration.on_experiment_delete.call(self)
-          increment_version
-        #end
+        alternatives.each(&:delete)
+        reset_winner
+        conn.srem(:experiments, name)
+        conn.del(name)
+        delete_participants
+        delete_finished
+        delete_goals
+        Split.configuration.on_experiment_delete.call(self)
+        increment_version
+        Split.configuration.reset
+      end
+    end
+
+    def delete_participants
+      Split.redis.with do |conn|
+        goals.each do |goal|
+          conn.del("#{self.key}:participants")
+        end
+      end
+    end
+
+    def delete_finished
+      Split.redis.with do |conn|
+        key = "#{self.key}:finished"
+        conn.del(key)
+        (goals).each do |goal|
+          conn.del("#{key}:#{goal}")
+        end
+        conn.del("#{key}")
       end
     end
 
@@ -276,6 +535,9 @@ module Split
         self.algorithm = exp_config['algorithm']
         self.alternatives = load_alternatives_from_redis
         self.goals = load_goals_from_redis
+        unless exp_config['max_participant_count'].nil?
+          self.max_participant_count = exp_config['max_participant_count'].to_i
+        end
       end
     end
 
@@ -310,20 +572,24 @@ module Split
       end
     end
 
+    def load_wiki_url_from_redis
+      Split.redis.with do |conn|
+        @wiki_url = conn.hget(:wiki_urls, @name)
+      end
+    end
+
     def load_alternatives_from_redis
       Split.redis.with do |conn|
-        
         case conn.type(@name)
         when 'set' # convert legacy sets to lists
           alts = conn.smembers(@name)
           conn.del(@name)
-          alts.reverse.each {|a| conn.lpush(@name, a) }
+          alts.reverse.each {|a| Split.redis.lpush(@name, a) }
           conn.lrange(@name, 0, -1)
         else
           conn.lrange(@name, 0, -1)
         end
       end
     end
-    
   end
 end
