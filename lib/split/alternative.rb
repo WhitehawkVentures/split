@@ -217,11 +217,7 @@ module Split
       n_a = alternative.participant_count
       n_c = control.participant_count
       
-      begin
-        z_score = Split::Zscore.calculate(p_a, n_a, p_c, n_c)
-      rescue
-        return 'N/A'
-      end
+      z_score = Split::Zscore.calculate(p_a, n_a, p_c, n_c)
     end
 
     def log_normal_probability_better_than_control(goal = nil)
