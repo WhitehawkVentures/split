@@ -1,5 +1,6 @@
 require 'split/zscore'
 require 'active_support/all'
+require 'simple-random'
 # TODO - take out require and implement using file paths?
 
 module Split
