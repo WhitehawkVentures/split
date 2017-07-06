@@ -176,9 +176,6 @@ module Split
     def increment_unique_completion(goal = nil, value = nil)
       Split.redis.with do |conn|
         field = set_field(goal, true)
-        if value
-          conn.lpush(key + set_value_field(goal, true), value)
-        end
         conn.hincrby(key, field, 1)
       end
     end
@@ -468,6 +465,35 @@ module Split
     def delete
       Split.redis.with do |conn|
         conn.del(key)
+        unless goals.empty?
+          goals.each do |g|
+            field = "completed_count:#{g}"
+            value_field = set_value_field(g)
+            conn.del(key + value_field)
+            conn.del(key + field)
+
+            field = "unique_completed_count:#{g}"
+            value_field = set_value_field(g, true)
+            conn.del(key + value_field)
+            conn.del(key + field)
+          end
+        end
+      end
+    end
+
+    def flatten_values
+      Split.redis.with do |conn|
+        unless goals.empty?
+          goals.each do |g|
+            value_field = set_value_field(g)
+            avg = completed_value(g)
+            conn.del(key + value_field)
+            conn.lpush(key + value_field, avg)
+
+            value_field = set_value_field(g, true)
+            conn.del(key + value_field)
+          end
+        end
       end
     end
 

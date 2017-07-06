@@ -217,6 +217,7 @@ module Split
       set_end_time
       delete_participants
       delete_finished
+      alternatives.each(&:flatten_values)
     end
 
     def participant_count
