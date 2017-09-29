@@ -517,15 +517,14 @@ module Split
     def delete_finished
       Split.redis.with do |conn|
         key = "#{self.key}:finished"
-        conn.del(key)
+        new_key = "gc:lists:#{conn.incr("gc:index")}"
+        conn.rename(key, new_key)
+        Split.configuration.on_garbage_collection.call(new_key)
         (goals).each do |goal|
           new_key = "gc:lists:#{conn.incr("gc:index")}"
           conn.rename("#{key}:#{goal}", new_key)
           Split.configuration.on_garbage_collection.call(new_key)
         end
-        new_key = "gc:lists:#{conn.incr("gc:index")}"
-        conn.rename("#{key}", new_key)
-        Split.configuration.on_garbage_collection.call(new_key)
       end
     end
 
