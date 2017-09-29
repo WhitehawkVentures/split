@@ -507,7 +507,9 @@ module Split
     def delete_participants
       Split.redis.with do |conn|
         goals.each do |goal|
-          conn.rename("#{self.key}:participants", "gc:lists:#{conn.incr("gc:index")}")
+          new_key = "gc:lists:#{conn.incr("gc:index")}"
+          conn.rename("#{self.key}:participants", )
+          Split.configuration.on_garbage_collection.call(new_key)
         end
       end
     end
@@ -517,9 +519,13 @@ module Split
         key = "#{self.key}:finished"
         conn.del(key)
         (goals).each do |goal|
-          conn.rename("#{key}:#{goal}", "gc:lists:#{conn.incr("gc:index")}")
+          new_key = "gc:lists:#{conn.incr("gc:index")}"
+          conn.rename("#{key}:#{goal}", new_key)
+          Split.configuration.on_garbage_collection.call(new_key)
         end
-        conn.rename("#{key}", "gc:lists:#{conn.incr("gc:index")}")
+        new_key = "gc:lists:#{conn.incr("gc:index")}"
+        conn.rename("#{key}", new_key)
+        Split.configuration.on_garbage_collection.call(new_key)
       end
     end
 
