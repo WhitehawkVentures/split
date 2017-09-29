@@ -506,22 +506,16 @@ module Split
 
     def delete_participants
       Split.redis.with do |conn|
-        new_key = "gc:sets:#{conn.incr("gc:index")}"
-        conn.rename("#{self.key}:participants", new_key)
-        Split.configuration.on_garbage_collection.call(new_key)
+        Split::Persistence.adapter.garbage_collect("sets", "#{self.key}:participants")
       end
     end
 
     def delete_finished
       Split.redis.with do |conn|
         key = "#{self.key}:finished"
-        new_key = "gc:sets:#{conn.incr("gc:index")}"
-        conn.rename(key, new_key)
-        Split.configuration.on_garbage_collection.call(new_key)
+        Split::Persistence.adapter.garbage_collect("sets", key)
         (goals).each do |goal|
-          new_key = "gc:sets:#{conn.incr("gc:index")}"
-          conn.rename("#{key}:#{goal}", new_key)
-          Split.configuration.on_garbage_collection.call(new_key)
+          Split::Persistence.adapter.garbage_collect("sets", "#{key}:#{goal}")
         end
       end
     end
