@@ -84,9 +84,13 @@ module Split
 
       def self.garbage_collect(type, key)
         Split.redis.with do |conn|
-          new_key = "gc:#{type}:#{conn.incr("gc:index")}"
-          conn.rename(key, new_key)
-          Split.configuration.on_garbage_collection.call(new_key)
+          begin
+            new_key = "gc:#{type}:#{conn.incr("gc:index")}"
+            conn.rename(key, new_key)
+            Split.configuration.on_garbage_collection.call(new_key)
+          rescue Redis::CommandError => e
+            raise e unless e.message.includes?("no such key")
+          end
         end
       end
       
