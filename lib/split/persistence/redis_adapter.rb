@@ -89,7 +89,7 @@ module Split
             conn.rename(key, new_key)
             Split.configuration.on_garbage_collection.call(new_key)
           rescue Redis::CommandError => e
-            raise e unless e.message.includes?("no such key")
+            raise e unless e.message.include?("no such key")
           end
         end
       end
