@@ -81,6 +81,18 @@ module Split
       def self.get_redis_key(key_frag)
         "#{config[:namespace]}:#{key_frag}"
       end
+
+      def self.garbage_collect(type, key)
+        Split.redis.with do |conn|
+          begin
+            new_key = "gc:#{type}:#{conn.incr("gc:index")}"
+            conn.rename(key, new_key)
+            Split.configuration.on_garbage_collection.call(new_key)
+          rescue Redis::CommandError => e
+            raise e unless e.message.include?("no such key")
+          end
+        end
+      end
       
       def get_redis_key(key_frag)
         self.class.get_redis_key(key_frag)

@@ -17,6 +17,7 @@ module Split
     attr_accessor :on_experiment_delete
     attr_accessor :on_experiment_max_out
     attr_accessor :on_experiment_end
+    attr_accessor :on_garbage_collection
     attr_accessor :include_rails_helper
     attr_accessor :pipeline_size
 
@@ -204,6 +205,7 @@ module Split
       @on_experiment_max_out = proc{|experiment|}
       @on_experiment_delete = proc{|experiment|}
       @on_experiment_end = proc{|experiment|}
+      @on_garbage_collection = proc{|experiment|}
       @db_failover_allow_parameter_override = false
       @enabled = true
       @experiments = {}

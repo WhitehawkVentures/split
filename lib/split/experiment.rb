@@ -217,6 +217,7 @@ module Split
       set_end_time
       delete_participants
       delete_finished
+      alternatives.each(&:flatten_values)
     end
 
     def participant_count
@@ -505,20 +506,17 @@ module Split
 
     def delete_participants
       Split.redis.with do |conn|
-        goals.each do |goal|
-          conn.del("#{self.key}:participants")
-        end
+        Split::Persistence.adapter.garbage_collect("sets", "#{self.key}:participants")
       end
     end
 
     def delete_finished
       Split.redis.with do |conn|
         key = "#{self.key}:finished"
-        conn.del(key)
+        Split::Persistence.adapter.garbage_collect("sets", key)
         (goals).each do |goal|
-          conn.del("#{key}:#{goal}")
+          Split::Persistence.adapter.garbage_collect("sets", "#{key}:#{goal}")
         end
-        conn.del("#{key}")
       end
     end
 

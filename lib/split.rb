@@ -33,6 +33,7 @@ module Split
   #   5. An instance of `Redis`, `Redis::Client`, `Redis::DistRedis`,
   #      or `Redis::Namespace`.
   def redis=(server)
+    
     if server.respond_to? :split
       if server["redis://"]
         namespace ||= :split
