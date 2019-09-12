@@ -173,10 +173,6 @@ module Split
       @ab_user ||= Split::Persistence.adapter.new(self)
     end
 
-    def split_id
-      ab_user.key_frag
-    end
-
     def exclude_visitor?
       instance_eval(&Split.configuration.ignore_filter)
     end
@@ -195,6 +191,10 @@ module Split
     end
 
     protected
+
+    def split_id
+      ab_user.key_frag
+    end
 
     def normalize_experiment(metric_descriptor)
       if Hash === metric_descriptor
