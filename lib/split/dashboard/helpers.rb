@@ -19,7 +19,7 @@ module Split
     def round(number, precision = 2)
       BigDecimal(number.to_s).round(precision).to_f
     rescue ArgumentError
-      number
+      number.to_f
     end
 
     def confidence_level(z_score)
